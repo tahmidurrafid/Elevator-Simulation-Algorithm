@@ -1,5 +1,6 @@
 from typing import List
 import numpy
+from numpy.core.fromnumeric import cumprod
 
 class Elevator:
     def __init__(self):
@@ -12,9 +13,12 @@ class Elevator:
         self.total_load_count = 0
         self.current_load = 0
     def print(self):
-        print("This is an elevator")
+        print(self.passenger_count)
+
     def init_passenger_count(self, capacity):
         self.passenger_count = []
+        self.first_customer = -1
+        self.current_load = 0
         for i in range(0, capacity+1):
             self.passenger_count.append(0)
 
@@ -70,7 +74,9 @@ class Simulation:
         self.elevators:List[Elevator] = list()
         self.opened_elevator = -1
         for i in range(0, self.elevator_count):
-            self.elevators.append(Elevator())
+            elevator = Elevator()
+            self.elevators.append(elevator)
+            elevator.init_passenger_count(self.elevator_capacity)
 
     def run(self):
         print("Running Simualation")
@@ -84,17 +90,46 @@ class Simulation:
             nextEventTime = 0
             availableElevatorIndex = self.getAvailableElevetorIndex()
             if(self.queue.empty() and availableElevatorIndex != -1):
-                print("Straight to the elevator")
                 customer = self.nextCustomer()
                 elevator = self.elevators[availableElevatorIndex]
                 customer.print()
+                if elevator.first_customer == -1:
+                    elevator.first_customer = self.customer_count
                 self.customer_count += 1
                 elevator.current_load += 1
                 self.time = customer.arrival
+                customer.elevator_in_time = self.time
+                elevator.passenger_count[customer.floor] += 1
                 if elevator.current_load == self.elevator_capacity or self.nextCustomer().arrival > self.time + self.door_holding_time:
-                    print("Elevator is full")
 
-            else:
+                    for k in range(elevator.first_customer, elevator.current_load):
+                        customer = self.customers[k]
+                        N = customer.floor - 1
+                        floor_open_before = 0
+                        passenger_drop_before = 0
+                        for i in range(0, customer.floor):
+                            floor_open_before += 1 if elevator.passenger_count[i] > 0 else 0
+                            passenger_drop_before +=  elevator.passenger_count[i]
+                        customer.elevator_time = self.interfloor_travelling_time*N + \
+                            (floor_open_before + 1)*self.opening_time + floor_open_before*self.closing_time + \
+                                (passenger_drop_before+1)*self.disemberking_time
+                        customer.delivery_time = customer.elevator_time + (self.time - customer.elevator_in_time) + self.door_holding_time
+                    max_floor = 1
+                    total_stops = 0
+                    for i in range(0, self.floor_count+1):
+                        if elevator.passenger_count[i] > 0:
+                            max_floor = i
+                            total_stops += 1
+                    elevator.trip_count += 1
+                    elevator.stops_count += total_stops
+                    opearation_time = (max_floor-1)*2*self.interfloor_travelling_time + total_stops*(self.opening_time + self.closing_time) + \
+                        elevator.current_load*self.disemberking_time
+                    elevator.operation_time += opearation_time
+                    elevator.next_available_time = self.time + self.door_holding_time + opearation_time
+                    print("Elevator will go")
+                    elevator.print()
+                    elevator.init_passenger_count(self.elevator_capacity)
+            else: 
                 print("push to queue")
 
             continue
