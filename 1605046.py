@@ -145,6 +145,7 @@ class Simulation:
                             (floor_open_before + 1)*self.opening_time + floor_open_before*self.closing_time + \
                                 (passenger_drop_before+1)*self.disemberking_time
                         customer.delivery_time = customer.elevator_time + (self.time - customer.arrival) + self.door_holding_time
+                        customer.elevator_time += self.door_holding_time + (self.time - customer.elevator_in_time)
                         customer.delay = customer.elevator_in_time - customer.arrival
                     max_floor = 1
                     total_stops = 0
@@ -333,6 +334,6 @@ for i in range(0, 10):
     stat = sim.run()
     stats.append(stat)
     output += stats[i].getCSV(i+1) + "\n"
-outfile = open("output2.csv", "w")
+outfile = open("output.csv", "w")
 outfile.write(output)
 outfile.close()
