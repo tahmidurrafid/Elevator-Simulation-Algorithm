@@ -69,6 +69,7 @@ class Simulation:
     def initiate(self):
         self.time = 0
         self.customer_count = 0
+        self.passenger_count = 0
         self.queue = Queue()
         self.customers:List[Customer] = list()
         self.elevators:List[Elevator] = list()
@@ -84,24 +85,24 @@ class Simulation:
         print(self.nextCustomer().arrival)
         print(self.getAvailableElevetorIndex())
         iteration = 0
-        while(self.time < self.simulation_termination and iteration < 10):
+        while(self.time < self.simulation_termination and iteration < 100):
             iteration += 1
             print(str(iteration) + "========================")
-            nextEventTime = 0
             availableElevatorIndex = self.getAvailableElevetorIndex()
-            if(self.queue.empty() and availableElevatorIndex != -1):
-                customer = self.nextCustomer()
+            if(availableElevatorIndex != -1):
+                customer = self.nextPassenger()
                 elevator = self.elevators[availableElevatorIndex]
                 customer.print()
                 if elevator.first_customer == -1:
-                    elevator.first_customer = self.customer_count
-                self.customer_count += 1
+                    elevator.first_customer = self.passenger_count
+                self.passenger_count += 1
+                self.customer_count = max(self.passenger_count, self.customer_count)
                 elevator.current_load += 1
                 self.time = customer.arrival
                 customer.elevator_in_time = self.time
                 elevator.passenger_count[customer.floor] += 1
-                if elevator.current_load == self.elevator_capacity or self.nextCustomer().arrival > self.time + self.door_holding_time:
 
+                if elevator.current_load == self.elevator_capacity or self.nextPassenger().arrival > self.time + self.door_holding_time:
                     for k in range(elevator.first_customer, elevator.current_load):
                         customer = self.customers[k]
                         N = customer.floor - 1
@@ -126,24 +127,25 @@ class Simulation:
                         elevator.current_load*self.disemberking_time
                     elevator.operation_time += opearation_time
                     elevator.next_available_time = self.time + self.door_holding_time + opearation_time
-                    print("Elevator will go")
-                    elevator.print()
+                    self.opened_elevator = -1
+                    print("Elevator will go: " + str(availableElevatorIndex))
                     elevator.init_passenger_count(self.elevator_capacity)
-            else: 
-                print("push to queue")
 
-            continue
-            elevatorIndex = self.getAvailableElevetorIndex()
-            if elevatorIndex != -1:
-                elevator = self.elevators[elevatorIndex]
-                elevator.current_load += 1
-                customer = self.nextCustomer()
-                self.time = customer.arrival
-                customer.elevator_in_time = self.time
-                self.customer_count += 1
-                # if self.nextCustomer().arrival > self.time + self.door_holding_time
             else:
-                self.queue.print()
+                print("push to queue")
+                self.openQueue(self.nextElevatorTime())
+
+    def openQueue(self, upto_time):
+        nextCustomer = self.nextCustomer()
+        while upto_time >= nextCustomer.arrival:
+            if(self.queue.empty()):
+                self.queue.front = self.customer_count
+            nextCustomer.from_queue = True
+            self.queue.length += 1
+            self.customer_count += 1
+            nextCustomer = self.nextCustomer()
+        if(self.getAvailableElevetorIndex() == -1):
+            self.time = self.nextElevatorTime()
 
     def getAvailableElevetorIndex(self):
         if self.opened_elevator != -1:
@@ -158,6 +160,11 @@ class Simulation:
         for i in range(0, self.elevator_count):
             minTime = min(minTime, self.elevators[i].next_available_time)
         return minTime
+
+    def nextPassenger(self)->Customer:
+        if(self.customer_count == self.passenger_count):
+            return self.nextCustomer()
+        return self.customers[self.passenger_count]
 
     def nextCustomer(self)->Customer:
         customer = None
