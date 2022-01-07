@@ -1,7 +1,6 @@
 from typing import List
 import numpy
-from numpy import random
-from numpy.core.fromnumeric import cumprod
+from numpy import floor, random
 
 class Elevator:
     def __init__(self):
@@ -58,7 +57,6 @@ class Queue:
     def print(self):
         print("This is queue")
 
-
 class Simulation:
     def __init__(self):
         self.elevator_count = 4
@@ -73,6 +71,29 @@ class Simulation:
         self.emberking_time = 3
         self.disemberking_time = 3
         self.mean_interarrival_time = 90
+    
+    def takeInput(self):
+        input = open("input.txt", "r")
+        line = input.readline()
+        self.simulation_termination = int(line)
+        line = input.readline()
+        x = line.split(" ")
+        self.floor_count = int(x[0])
+        self.elevator_count = int(x[1])
+        self.elevator_capacity = int(x[2])
+        self.batch_size = int(x[3])
+        line = input.readline()
+        x = line.split(" ")
+        self.door_holding_time = int(x[0]) 
+        self.interfloor_travelling_time = int(x[1])
+        self.opening_time = int(x[2])
+        self.closing_time = int(x[3])
+        line = input.readline()
+        x = line.split(" ")
+        self.emberking_time = int(x[0])
+        self.disemberking_time = int(x[1])
+        line = input.readline()
+        self.mean_interarrival_time = float(line)*60
 
     def initiate(self):
         self.time = 0
@@ -92,7 +113,6 @@ class Simulation:
         iteration = 0
         while(self.time < self.simulation_termination):
             iteration += 1
-            print(str(iteration) + "========================")
             availableElevatorIndex = self.getAvailableElevetorIndex()
             if(availableElevatorIndex != -1):
                 customer = self.nextPassenger()
@@ -137,22 +157,17 @@ class Simulation:
                     opearation_time = (max_floor-1)*2*self.interfloor_travelling_time + total_stops*(self.opening_time + self.closing_time) + \
                         elevator.current_load*self.disemberking_time
                     elevator.operation_time += opearation_time
+                    elevator.total_load_count += elevator.current_load
                     elevator.next_available_time = self.time + self.door_holding_time + opearation_time
                     self.opened_elevator = -1
-                    print("Elevator will go: " + str(availableElevatorIndex))
+                    if(elevator.current_load == self.elevator_capacity):
+                        elevator.max_load_times_count += 1
                     elevator.init_passenger_count(self.elevator_capacity)
             else:
-                print("push to queue")
+                # print("push to queue")
                 self.openQueue(self.nextElevatorTime())
-            print("Customer: "+  str(self.passenger_count))
-            totalDeliveryTime = 0
-            counter2 = 1
-            for i in range(0, self.passenger_count):
-                if self.customers[i].delay > 0:
-                    counter2 += 1
-                totalDeliveryTime += self.customers[i].delay
-            counter2 = totalDeliveryTime/counter2
-            print("Longest queue: " + str(self.queue.longest))
+        stat = Statistics(self)
+        return stat
 
     def openQueue(self, upto_time):
         nextCustomer = self.nextCustomer()
@@ -195,18 +210,129 @@ class Simulation:
         if self.customer_count == len(self.customers):
             timeOffset = self.customers[self.customer_count-1].arrival if self.customer_count > 0 else 0
             betweenTime = self.getBetweenTime()
-            customer = Customer(self.floor_count, timeOffset + self.getBetweenTime() + self.getBetweenTime())
+            customer = Customer(self.floor_count, timeOffset + betweenTime)
             self.customers.append(customer)
             for i in range(0, self.batch_size-1):
                 if(numpy.random.random() <= .5):
-                    customer = Customer(self.floor_count, timeOffset + self.getBetweenTime() + self.getBetweenTime())
-                    self.customers.append(customer)
-
+                    customer2 = Customer(self.floor_count, timeOffset + betweenTime)
+                    self.customers.append(customer2)
         else:
             customer = self.customers[self.customer_count]
         return customer
 
-# arr:List[Simulation] = List()
+class Statistics:
+    def __init__(self, sim:Simulation):
+        self.sim = sim
+        self.totalCustomers = 0
+        self.averageQueueLength = 0
+        self.maximumQueueLength = 0
+        self.averageDelayTime = 0
+        self.maximumDelayTime = 0
+        self.averageElevatorTime = 0
+        self.maximumElevatorTime = 0
+        self.averageDeliveryTime = 0
+        self.maximumDeliveryTime = 0
+        self.loadSize = 0
+        self.operationTime = 0
+        self.availableTime = 0
+        self.numberOfMaxLoads = []
+        self.numberOfStops = []
+        self.calculate()
+
+    def calculate(self):
+        sim = self.sim
+        self.totalCustomers = sim.passenger_count
+        total = 0
+        for i in range(0, sim.passenger_count):
+            total += sim.customers[i].delay
+            self.maximumDelayTime = max(self.maximumDelayTime, sim.customers[i].delay)
+        self.averageDelayTime = total/self.totalCustomers
+        self.averageQueueLength = total/sim.time
+        self.maximumQueueLength = sim.queue.longest
+        total = 0
+        for i in range(0, self.totalCustomers):
+            total += sim.customers[i].elevator_time
+            self.maximumElevatorTime = max(self.maximumElevatorTime, sim.customers[i].elevator_time)
+        self.averageElevatorTime = total/self.totalCustomers
+        total = 0
+        for i in range(0, self.totalCustomers):
+            total += sim.customers[i].delivery_time
+            self.maximumDeliveryTime = max(self.maximumDeliveryTime, sim.customers[i].delivery_time)
+        self.averageDeliveryTime = total/self.totalCustomers
+        self.loadSize = [elevator.total_load_count for elevator in sim.elevators]
+        self.operationTime = [elevator.operation_time for elevator in sim.elevators]
+        self.availableTime = [(sim.time - elevator.operation_time) for elevator in sim.elevators]
+        self.numberOfMaxLoads = [elevator.max_load_times_count for elevator in sim.elevators]
+        self.numberOfStops = [elevator.stops_count for elevator in sim.elevators]
+
+    def getCSVHeading():
+        return "Simulation_Number," + \
+        "Total_Customers," + \
+        "Avg_Queue_Size," + \
+        "Max_Queue_Size," + \
+        "Avg_Delay_Time," + \
+        "Max_Delay_Time," + \
+        "Avg_Elevator_Time," + \
+        "Max_Elevator_Time," + \
+        "Avg_Delivery_Time," + \
+        "Max_Delivery_Time," + \
+        "Load_Size," + \
+        "Opeation_Time," + \
+        "Available Time," + \
+        "Max_Loads_Count," + \
+        "Stops_Count" 
+    
+    def arrToStr(arr):
+        x = "["
+        for i in range(0, len(arr)):
+            x += str(arr[i]) + " "
+        x +=  "]"
+        return x
+
+    def getCSV(self, number):
+        return str(number) + "," + \
+        str(self.totalCustomers) + "," + \
+        str(self.averageQueueLength) + "," + \
+        str(self.maximumQueueLength) + "," + \
+        str(self.averageDelayTime) + "," + \
+        str(self.maximumDelayTime) + "," + \
+        str(self.averageElevatorTime) + "," + \
+        str(self.maximumElevatorTime) + "," + \
+        str(self.averageDeliveryTime) + "," + \
+        str(self.maximumDeliveryTime) + "," + \
+        str(Statistics.arrToStr(self.loadSize)) + "," + \
+        str(Statistics.arrToStr(self.operationTime)) + "," + \
+        str(Statistics.arrToStr(self.availableTime)) + "," + \
+        str(Statistics.arrToStr(self.numberOfMaxLoads)) + "," + \
+        str(Statistics.arrToStr(self.numberOfStops))
+
+    def print(self):
+        for i in range(0, self.totalCustomers):
+            if(self.sim.customers[i].arrival > self.sim.customers[i].elevator_in_time):
+                print(str(i) + " == ")
+        print("Total customers: " + str(self.totalCustomers))
+        print("Average Queue Length: " + str(self.averageQueueLength))
+        print("Maximum Queue Length: " + str(self.maximumQueueLength))
+        print("Average Delay Time: " + str(self.averageDelayTime))
+        print("Maximum Delay Time: " + str(self.maximumDelayTime))
+        print("Average Elevator Time: " + str(self.averageElevatorTime))
+        print("Maximum Elevator Time: " + str(self.maximumElevatorTime))
+        print("Average Delivery Time: " + str(self.averageDeliveryTime))
+        print("Maximum Delivery Time: " + str(self.maximumDeliveryTime))
+        print("Average load: " + str(self.loadSize))
+        print("Operation Time: " + str(self.operationTime))
+        print("Available Time: " + str(self.availableTime))
+        print("Max Load Time: " + str(self.numberOfMaxLoads))
+        print("Number of stops: " + str(self.numberOfStops))
 
 sim = Simulation()
-sim.run()
+sim.takeInput()
+stats = []
+output = Statistics.getCSVHeading() + "\n"
+for i in range(0, 10):
+    stat = sim.run()
+    stats.append(stat)
+    output += stats[i].getCSV(i+1) + "\n"
+outfile = open("output2.csv", "w")
+outfile.write(output)
+outfile.close()
