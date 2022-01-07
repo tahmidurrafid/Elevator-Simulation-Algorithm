@@ -44,7 +44,7 @@ class Queue:
         self.start_time = 0
         self.total_time = 0
         self.total_customer_time = 0
-        
+        self.longest = 0
     def empty(self):
         return self.length == 0
 
@@ -62,7 +62,7 @@ class Queue:
 class Simulation:
     def __init__(self):
         self.elevator_count = 4
-        self.simulation_termination = 4800
+        self.simulation_termination = 10000
         self.floor_count = 12
         self.elevator_capacity = 12
         self.batch_size = 6
@@ -72,7 +72,7 @@ class Simulation:
         self.closing_time = 3
         self.emberking_time = 3
         self.disemberking_time = 3
-        self.mean_interarrival_time = 30
+        self.mean_interarrival_time = 90
 
     def initiate(self):
         self.time = 0
@@ -124,7 +124,8 @@ class Simulation:
                         customer.elevator_time = self.interfloor_travelling_time*N + \
                             (floor_open_before + 1)*self.opening_time + floor_open_before*self.closing_time + \
                                 (passenger_drop_before+1)*self.disemberking_time
-                        customer.delivery_time = customer.elevator_time + (self.time - customer.elevator_in_time) + self.door_holding_time
+                        customer.delivery_time = customer.elevator_time + (self.time - customer.arrival) + self.door_holding_time
+                        customer.delay = customer.elevator_in_time - customer.arrival
                     max_floor = 1
                     total_stops = 0
                     for i in range(0, self.floor_count+1):
@@ -143,7 +144,15 @@ class Simulation:
             else:
                 print("push to queue")
                 self.openQueue(self.nextElevatorTime())
-            print(self.passenger_count)
+            print("Customer: "+  str(self.passenger_count))
+            totalDeliveryTime = 0
+            counter2 = 1
+            for i in range(0, self.passenger_count):
+                if self.customers[i].delay > 0:
+                    counter2 += 1
+                totalDeliveryTime += self.customers[i].delay
+            counter2 = totalDeliveryTime/counter2
+            print("Longest queue: " + str(self.queue.longest))
 
     def openQueue(self, upto_time):
         nextCustomer = self.nextCustomer()
@@ -152,6 +161,7 @@ class Simulation:
                 self.queue.front = self.customer_count
             nextCustomer.from_queue = True
             self.queue.length += 1
+            self.queue.longest = max(self.queue.longest, self.queue.length)
             self.customer_count += 1
             nextCustomer = self.nextCustomer()
         if(self.getAvailableElevetorIndex() == -1):
@@ -166,8 +176,8 @@ class Simulation:
                 return i
         return -1
     def getBetweenTime(self) -> int:
-        # return int(-numpy.log(random.random())*self.mean_interarrival_time)
-        return numpy.random.randint(0, 31)
+        return int(-numpy.log(random.random())*self.mean_interarrival_time)
+        # return numpy.random.randint(0, 31)
 
     def nextElevatorTime(self):
         minTime = numpy.Inf
@@ -184,8 +194,14 @@ class Simulation:
         customer = None
         if self.customer_count == len(self.customers):
             timeOffset = self.customers[self.customer_count-1].arrival if self.customer_count > 0 else 0
-            customer = Customer(self.floor_count, timeOffset + self.getBetweenTime() )
+            betweenTime = self.getBetweenTime()
+            customer = Customer(self.floor_count, timeOffset + self.getBetweenTime() + self.getBetweenTime())
             self.customers.append(customer)
+            for i in range(0, self.batch_size-1):
+                if(numpy.random.random() <= .5):
+                    customer = Customer(self.floor_count, timeOffset + self.getBetweenTime() + self.getBetweenTime())
+                    self.customers.append(customer)
+
         else:
             customer = self.customers[self.customer_count]
         return customer
